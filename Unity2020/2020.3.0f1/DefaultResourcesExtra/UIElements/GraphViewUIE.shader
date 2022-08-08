@@ -17,12 +17,14 @@ Shader "Hidden/GraphView/GraphViewUIE"
     float _GraphViewScale;
     float _EditorPixelsPerPoint;
 
-    v2f ProcessEdge(appdata_t v, inout float4 clipSpacePos)
+    static const float kGraphViewEdgeFlag = 10.0f; // As defined in VertexFlags
+
+    v2f ProcessEdge(appdata_t v)
     {
         UNITY_SETUP_INSTANCE_ID(v);
         uie_vert_load_payload(v);
         v.vertex.xyz = mul(uie_toWorldMat, v.vertex);
-        v.uv.xy = mul(uie_toWorldMat, float3(v.uv.xy,0)).xy;
+        v.uv.xy = mul(uie_toWorldMat, float4(v.uv.xy,0,0)).xy;
 
         static const float k_MinEdgeWidth = 1.75f;
         const float halfWidth = length(v.uv.xy);
@@ -38,41 +40,46 @@ Shader "Hidden/GraphView/GraphViewUIE"
 
         v2f o;
         UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-        clipSpacePos = UnityObjectToClipPos(float3(vertex.xy, kUIEMeshZ));
-        o.clipPos.xy = clipSpacePos.xy / clipSpacePos.w;
+        o.pos = UnityObjectToClipPos(float3(vertex.xy, kUIEMeshZ));
+        o.clipPos.xy = o.pos.xy / o.pos.w;
+        o.clipPos.zw = float2(0,0);
         o.uvXY.xy = float2(vertexHalfWidth*sideSign, halfWidth);
         o.uvXY.zw = vertex.xy;
-        o.flags.x = 2.0f; // Marking as an edge
-        o.flags.y = _ZoomFactor;
-        o.flags.zw = (fixed2)0;
-        o.svgFlags = (fixed3)0;
+        o.typeTexSettings.x = 100.0f; // Marking as an edge
+        o.typeTexSettings.y = _ZoomFactor;
+        o.typeTexSettings.zw = half2(0, 0);
+        o.colorUVs = float2(0,0);
+        o.circle = half4(0, 0, 0, 0);
 
-        o.clipRectOpacityUVs = uie_std_vert_shader_info(v, o.color);
+        uie_std_vert_shader_info(v, o.color, o.clipRectOpacityUVs.xy, o.clipRectOpacityUVs.zw, o.colorUVs.xy);
+
 #if UIE_SHADER_INFO_IN_VS
-        o.clipRect = tex2Dlod(_ShaderInfoTex, float4(o.clipRectOpacityUVs.xy, 0, 0)),
+        o.clipRect = tex2Dlod(_ShaderInfoTex, float4(o.clipRectOpacityUVs.xy, 0, 0));
 #endif // UIE_SHADER_INFO_IN_VS
 
         o.color.a *= edgeWidth / realWidth; // make up for bigger edge by fading it.
         return o;
     }
 
-    v2f vert(appdata_t v, out float4 clipSpacePos : SV_POSITION)
+    v2f vert(appdata_t v)
     {
-        if (v.idsFlags.w*255.0f == kUIEVertexLastFlagValue)
-            return ProcessEdge(v, clipSpacePos);
-        return uie_std_vert(v, clipSpacePos);
+        if (v.flags.x*255.0f == kGraphViewEdgeFlag)
+            return ProcessEdge(v);
+        return uie_std_vert(v);
     }
 
     fixed4 frag(v2f IN) : SV_Target
     {
         uie_fragment_clip(IN);
-        if (IN.flags.x == 2.0f) // Is it an edge?
+        fixed4 col = fixed4(0, 0, 0, 0);
+        if (IN.typeTexSettings.x == 100.0f) // Is it an edge?
         {
-            float distanceSat = saturate((IN.uvXY.y - abs(IN.uvXY.x)) * IN.flags.y + 0.5);
-            return fixed4(IN.color.rgb, IN.color.a * distanceSat);
+            float distanceSat = saturate((IN.uvXY.y - abs(IN.uvXY.x)) * IN.typeTexSettings.y + 0.5);
+            col = fixed4(IN.color.rgb, IN.color.a * distanceSat);
         }
-
-        return uie_editor_frag(IN);
+        else
+            col = uie_editor_frag(IN);
+        return col;
     }
     ENDCG
 
@@ -112,7 +119,7 @@ Shader "Hidden/GraphView/GraphViewUIE"
         // SM3.5 version
         SubShader
         {
-            Tags { "UIE_VertexTexturingIsAvailable" = "1" }
+            Tags { "UIE_VertexTexturingIsAvailable" = "1" "UIE_ShaderModelIs35" = "1" }
             Pass
             {
                 CGPROGRAM

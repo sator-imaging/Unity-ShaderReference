@@ -11,7 +11,7 @@ Shader "Hidden/SceneViewWireframe" {
             fixed4 unity_SceneViewWireColor;
         CBUFFER_END
 
-        fixed4 frag () : COLOR
+        fixed4 frag () : SV_Target
         {
             return unity_SceneViewWireColor;
         }
@@ -37,6 +37,15 @@ Shader "Hidden/SceneViewWireframe" {
             #pragma vertex vert
             #pragma fragment frag
             #pragma target 3.0
+            ENDCG
+        }
+
+        Pass {
+            // SM6.0
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma use_dxc d3d11
             ENDCG
         }
     }

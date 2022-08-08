@@ -32,22 +32,6 @@ Shader "Hidden/Internal-UIRDefault"
         // Users pass depth between [Near,Far] = [-1,1]. This gets stored on the depth buffer in [Near,Far] [0,1] regardless of the underlying graphics API.
         Cull Off    // Two sided rendering is crucial for immediate clipping
         ZWrite Off
-        Stencil
-        {
-            Ref         255 // 255 for ease of visualization in RenderDoc, but can be just one bit
-            ReadMask    255
-            WriteMask   255
-
-            CompFront Always
-            PassFront Keep
-            ZFailFront Replace
-            FailFront Keep
-
-            CompBack Equal
-            PassBack Keep
-            ZFailBack Zero
-            FailBack Keep
-        }
 
         Tags
         {
@@ -60,7 +44,7 @@ Shader "Hidden/Internal-UIRDefault"
         // SM3.5 version
         SubShader
         {
-            Tags { "UIE_VertexTexturingIsAvailable" = "1" }
+            Tags { "UIE_VertexTexturingIsAvailable" = "1" "UIE_ShaderModelIs35" = "1" }
             Pass
             {
                 CGPROGRAM
@@ -68,7 +52,6 @@ Shader "Hidden/Internal-UIRDefault"
                 #pragma vertex vert
                 #pragma fragment frag
                 #pragma require samplelod
-                #define UIE_SDF_TEXT
                 #include "UnityUIE.cginc"
                 ENDCG
             }
@@ -83,7 +66,6 @@ Shader "Hidden/Internal-UIRDefault"
                 #pragma target 2.0
                 #pragma vertex vert
                 #pragma fragment frag
-                #define UIE_SDF_TEXT
                 #include "UnityUIE.cginc"
                 ENDCG
             }
