@@ -452,9 +452,9 @@ struct v2f_vertex_lit {
     fixed4 spec : COLOR1;
 };
 
-inline fixed4 VertexLight( v2f_vertex_lit i, sampler2D mainTex )
+inline fixed4 VertexLight(v2f_vertex_lit i, sampler2D mainTex)
 {
-    fixed4 texcol = tex2D( mainTex, i.uv );
+    fixed4 texcol = tex2D(mainTex, i.uv);
     fixed4 c;
     c.xyz = ( texcol.xyz * i.diff.xyz + i.spec.xyz * texcol.a );
     c.w = texcol.w * i.diff.w;
@@ -576,7 +576,7 @@ inline half3 DecodeRealtimeLightmap( fixed4 color )
 #endif
 }
 
-inline half3 DecodeDirectionalLightmap (half3 color, fixed4 dirTex, half3 normalWorld)
+inline half3 DecodeDirectionalLightmap(half3 color, fixed4 dirTex, half3 normalWorld)
 {
     // In directional (non-specular) mode Enlighten bakes dominant light direction
     // in a way, that using it for half Lambert and then dividing by a "rebalancing coefficient"
@@ -682,6 +682,8 @@ inline fixed3 UnpackNormal(fixed4 packednormal)
 {
 #if defined(UNITY_NO_DXT5nm)
     return packednormal.xyz * 2 - 1;
+#elif defined(UNITY_ASTC_NORMALMAP_ENCODING)
+    return UnpackNormalDXT5nm(packednormal);
 #else
     return UnpackNormalmapRGorAG(packednormal);
 #endif
@@ -689,11 +691,14 @@ inline fixed3 UnpackNormal(fixed4 packednormal)
 
 fixed3 UnpackNormalWithScale(fixed4 packednormal, float scale)
 {
-#ifndef UNITY_NO_DXT5nm
+#if defined(UNITY_ASTC_NORMALMAP_ENCODING)
+    // (y, y, y, x), preferred for ASTC
+    packednormal.x = packednormal.w;
+#elif !defined(UNITY_NO_DXT5nm)
     // Unpack normal as DXT5nm (1, y, 1, x) or BC5 (x, y, 0, 1)
     // Note neutral texture like "bump" is (0, 0, 1, 1) to work with both plain RGB normal and DXT5nm/BC5
     packednormal.x *= packednormal.w;
-#endif
+#endif // UNITY_NO_DXT5nm
     fixed3 normal;
     normal.xy = (packednormal.xy * 2 - 1) * scale;
     normal.z = sqrt(1 - saturate(dot(normal.xy, normal.xy)));

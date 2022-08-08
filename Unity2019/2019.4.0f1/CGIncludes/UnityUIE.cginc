@@ -75,7 +75,7 @@ sampler2D _ShaderInfoTex;
 float4 _ShaderInfoTex_TexelSize;
 
 float4 _1PixelClipInvView; // xy in clip space, zw inverse in view space
-float4 _PixelClipRect; // In framebuffer space
+float4 _ScreenClipRect; // In clip space
 
 #if !UIE_SHADER_INFO_IN_VS
 
@@ -103,20 +103,20 @@ struct appdata_t
 
 struct v2f
 {
-    float4 vertex   : SV_POSITION;
     UIE_V2F_COLOR_T color : COLOR;
     float4 uvXY  : TEXCOORD0; // UV and ZW holds XY position in points
-    nointerpolation fixed4 flags : TEXCOORD1;
-    nointerpolation fixed3 svgFlags : TEXCOORD2;
-    nointerpolation fixed4 clipRectOpacityUVs : TEXCOORD3;
+    fixed4 flags : TEXCOORD1;
+    fixed3 svgFlags : TEXCOORD2;
+    fixed4 clipRectOpacityUVs : TEXCOORD3;
+    float2 clipPos : TEXCOORD4;
 #if UIE_SHADER_INFO_IN_VS
-    nointerpolation fixed4 clipRect : TEXCOORD4; // Clip rect presampled
+    nointerpolation fixed4 clipRect : TEXCOORD5; // Clip rect presampled
 #endif // UIE_SHADER_INFO_IN_VS
     UNITY_VERTEX_OUTPUT_STEREO
 };
 
-static const float kUIEMeshZ = 0.995f; // Keep in track with UIRUtility.k_MeshPosZ
-static const float kUIEMaskZ = -0.995f; // Keep in track with UIRUtility.k_MaskPosZ
+static const float kUIEMeshZ = 0.0f; // Keep in track with UIRUtility.k_MeshPosZ
+static const float kUIEMaskZ = 1.0f; // Keep in track with UIRUtility.k_MaskPosZ
 
 static const float kUIEVertexLastFlagValue = 10.0f; // Keep in track with UIR.VertexFlags
 
@@ -146,7 +146,7 @@ static const float kUIEVertexLastFlagValue = 10.0f; // Keep in track with UIR.Ve
 // transforms. It does not matter because in the event where there is no ancestor with a Group or Bone RenderHint, these transform
 // will be identities.
 
-static float3x4 uie_toWorldMat;
+static float4x4 uie_toWorldMat;
 
 // Returns the view-space offset that must be applied to the vertex to satisfy a minimum displacement constraint.
 // vertex               Coordinates of the vertex, in vertex-space.
@@ -162,7 +162,7 @@ float2 uie_get_border_offset(float4 vertex, float2 embeddedDisplacement, float m
     // if we don't meet it anymore.
     float2 newFrameDisplacementAbs = max(minDisplacement.xx, frameDisplacementAbs);
     float2 newFrameDisplacementAbsBeforeRound = newFrameDisplacementAbs;
-    newFrameDisplacementAbs = round(newFrameDisplacementAbs);
+    newFrameDisplacementAbs = round(newFrameDisplacementAbs + 0.02);
     if(noShrinkX)
         newFrameDisplacementAbs.x = max(newFrameDisplacementAbs.x, newFrameDisplacementAbsBeforeRound.x);
     if(noShrinkY)
@@ -178,7 +178,12 @@ float2 uie_get_border_offset(float4 vertex, float2 embeddedDisplacement, float m
 
 float2 uie_snap_to_integer_pos(float2 clipSpaceXY)
 {
-    return ((int2)((clipSpaceXY+1)/_1PixelClipInvView.xy+0.51f)) * _1PixelClipInvView.xy-1;
+    // Convert from clip space to framebuffer space (unit = 1 pixel).
+    float2 pixelPos = (clipSpaceXY + 1) / _1PixelClipInvView.xy;
+    // Add an offset before rounding to avoid half which is very common to land onto.
+    float2 roundedPixelPos = round(pixelPos + 0.1527);
+    // Go back to clip space.
+    return roundedPixelPos * _1PixelClipInvView.xy - 1;
 }
 
 void uie_fragment_clip(v2f IN)
@@ -191,13 +196,13 @@ void uie_fragment_clip(v2f IN)
 #endif // UIE_SHADER_INFO_IN_VS
 
     float2 pointPos = IN.uvXY.zw;
-    float2 pixelPos = IN.vertex.xy;
-    float2 s = step(clipRect.xy,   pointPos) + step(pointPos, clipRect.zw) +
-               step(_PixelClipRect.xy, pixelPos)  + step(pixelPos, _PixelClipRect.zw);
+    float2 clipPos = IN.clipPos.xy;
+    float2 s = step(clipRect.xy, pointPos) + step(pointPos, clipRect.zw) +
+        step(_ScreenClipRect.xy, clipPos) + step(clipPos, _ScreenClipRect.zw);
     clip(dot(float3(s,1),float3(1,1,-7.95f)));
 }
 
-float2 uie_decode_shader_info_texel_pos(float2 pageXY, float id)
+float2 uie_decode_shader_info_texel_pos(float2 pageXY, float id, float yStride)
 {
     const float kShaderInfoPageWidth = 32;
     const float kShaderInfoPageHeight = 8;
@@ -208,32 +213,32 @@ float2 uie_decode_shader_info_texel_pos(float2 pageXY, float id)
 
     return float2(
         pageXY.x * kShaderInfoPageWidth + idX,
-        pageXY.y * kShaderInfoPageHeight + idY);
+        pageXY.y * kShaderInfoPageHeight + idY * yStride);
 }
 
 void uie_vert_load_payload(appdata_t v)
 {
 #if UIE_SHADER_INFO_IN_VS
 
-    float2 xformTexel = uie_decode_shader_info_texel_pos(v.xformClipPages.xy, v.idsFlags.x);
-    xformTexel.y *= 3.0f; // Because each transform entry is 3 texels high
-
+    float2 xformTexel = uie_decode_shader_info_texel_pos(v.xformClipPages.xy, v.idsFlags.x, 3.0f);
     float2 row0UV = (xformTexel + float2(0, 0) + 0.5f) * _ShaderInfoTex_TexelSize.xy;
     float2 row1UV = (xformTexel + float2(0, 1) + 0.5f) * _ShaderInfoTex_TexelSize.xy;
     float2 row2UV = (xformTexel + float2(0, 2) + 0.5f) * _ShaderInfoTex_TexelSize.xy;
 
-    uie_toWorldMat = float3x4(
+    uie_toWorldMat = float4x4(
         tex2Dlod(_ShaderInfoTex, float4(row0UV, 0, 0)),
         tex2Dlod(_ShaderInfoTex, float4(row1UV, 0, 0)),
-        tex2Dlod(_ShaderInfoTex, float4(row2UV, 0, 0)));
+        tex2Dlod(_ShaderInfoTex, float4(row2UV, 0, 0)),
+        float4(0, 0, 0, 1));
 
 #else // !UIE_SHADER_INFO_IN_VS
 
     int xformConstantIndex = (int)(v.idsFlags.x * 255.0f * 3.0f);
-    uie_toWorldMat = float3x4(
+    uie_toWorldMat = float4x4(
         _Transforms[xformConstantIndex + 0],
         _Transforms[xformConstantIndex + 1],
-        _Transforms[xformConstantIndex + 2]);
+        _Transforms[xformConstantIndex + 2],
+        float4(0, 0, 0, 1));
 
 #endif // UIE_SHADER_INFO_IN_VS
 }
@@ -298,7 +303,7 @@ GradientLocation uie_sample_gradient_location(float settingIndex, float2 uv, sam
         uv = float2(uie_radial_address(uv, focus), 0.0);
     }
 
-    int addressing = gradSettings.y * 255;
+    int addressing = round(gradSettings.y * 255);
     uv.x = (addressing == 0) ? fmod(uv.x,1.0f) : uv.x; // Wrap
     uv.x = (addressing == 1) ? max(min(uv.x,1.0f), 0.0f) : uv.x; // Clamp
     float w = fmod(uv.x,2.0f);
@@ -348,9 +353,9 @@ float4 uie_std_vert_shader_info(appdata_t v, out UIE_V2F_COLOR_T color)
     color = UIE_V2F_COLOR_T(GammaToLinearSpace(v.color.rgb), v.color.a);
 #endif // UIE_COLORSPACE_GAMMA
 
-    const float2 opacityUV = (uie_decode_shader_info_texel_pos(v.opacityPageSVGSettingIndex.xy, v.idsFlags.z) + 0.5f) * _ShaderInfoTex_TexelSize.xy;
+    const float2 opacityUV = (uie_decode_shader_info_texel_pos(v.opacityPageSVGSettingIndex.xy, v.idsFlags.z, 1.0f) + 0.5f) * _ShaderInfoTex_TexelSize.xy;
 #if UIE_SHADER_INFO_IN_VS
-    const float2 clipRectUV = (uie_decode_shader_info_texel_pos(v.xformClipPages.zw, v.idsFlags.y) + 0.5f) * _ShaderInfoTex_TexelSize.xy;
+    const float2 clipRectUV = (uie_decode_shader_info_texel_pos(v.xformClipPages.zw, v.idsFlags.y, 1.0f) + 0.5f) * _ShaderInfoTex_TexelSize.xy;
     color.a *= tex2Dlod(_ShaderInfoTex, float4(opacityUV, 0, 0)).a;
 #else // !UIE_SHADER_INFO_IN_VS
     const float2 clipRectUV = float2(v.idsFlags.y * 255.0f, 0.0f);
@@ -359,7 +364,7 @@ float4 uie_std_vert_shader_info(appdata_t v, out UIE_V2F_COLOR_T color)
     return float4(clipRectUV, opacityUV);
 }
 
-v2f uie_std_vert(appdata_t v)
+v2f uie_std_vert(appdata_t v, out float4 clipSpacePos)
 {
     v2f OUT;
     UNITY_SETUP_INSTANCE_ID(v);
@@ -390,12 +395,14 @@ v2f uie_std_vert(appdata_t v)
     v.vertex.xy += viewOffset;
 
     OUT.uvXY.zw = v.vertex.xy;
-    OUT.vertex = UnityObjectToClipPos(v.vertex);
+    clipSpacePos = UnityObjectToClipPos(v.vertex);
 
 #ifndef UIE_SDF_TEXT
     if (isText == 1)
-        OUT.vertex.xy = uie_snap_to_integer_pos(OUT.vertex.xy);
-#endif
+        clipSpacePos.xy = uie_snap_to_integer_pos(clipSpacePos.xy);
+#endif // UIE_SDF_TEXT
+
+    OUT.clipPos.xy = clipSpacePos.xy / clipSpacePos.w;
 
     OUT.uvXY.xy = TRANSFORM_TEX(v.uv, _MainTex);
     if (isAtlasTex == 1.0f)
@@ -478,7 +485,7 @@ UIE_FRAG_T uie_std_frag(v2f IN)
 
 #ifndef UIE_CUSTOM_SHADER
 
-v2f vert(appdata_t v) { return uie_std_vert(v); }
+v2f vert(appdata_t v, out float4 clipSpacePos : SV_POSITION) { return uie_std_vert(v, clipSpacePos); }
 UIE_FRAG_T frag(v2f IN) : SV_Target { return uie_std_frag(IN); }
 
 #endif // UIE_CUSTOM_SHADER

@@ -9,29 +9,28 @@ Shader "Hidden/Internal-UIRDefault"
         [HideInInspector] _FontTex("Font", 2D) = "black" {}
         [HideInInspector] _CustomTex("Custom", 2D) = "black" {}
         [HideInInspector] _Color("Tint", Color) = (1,1,1,1)
-
-        // The ortho matrix used to draw 2D UI causes the Y coordinate to flip which also reverses the winding order,
-        // so our two-sided stencil is setup accordingly (front settings are swapped with back settings).
-        // When drawing in perspective, then these settings are flipped.
-        [HideInInspector] _StencilCompFront("__scf", Float) = 3.0   // Equal
-        [HideInInspector] _StencilPassFront("__spf", Float) = 0.0   // Keep
-        [HideInInspector] _StencilZFailFront("__szf", Float) = 1.0  // Zero
-        [HideInInspector] _StencilFailFront("__sff", Float) = 0.0   // Keep
-
-        [HideInInspector] _StencilCompBack("__scb", Float) = 8.0    // Always
-        [HideInInspector] _StencilPassBack("__spb", Float) = 0.0    // Keep
-        [HideInInspector] _StencilZFailBack("__szb", Float) = 2.0   // Replace
-        [HideInInspector] _StencilFailBack("__sfb", Float) = 0.0    // Keep
     }
 
     Category
     {
         Lighting Off
-        Blend SrcAlpha OneMinusSrcAlpha
+
+
+        //   Our textures and colors are not premultiplied, but we use this equation for alpha so that
+        //   transparency goes towards 0 as more semi - transparent layers are added(like premultiplied).
+        //   This is relevant in the case where we render into a render texture that is to be drawn on
+        //   top of another render target afterwards.
+        //   Reminder:
+        //   dst.a' = 1 - (1 - dst.a)(1 - src.a)
+        //          = 1 - (1 - dst.a - src.a + dst.a * src.a)
+        //          = 1 - 1 + dst.a + src.a - dst.a * src.a
+        //          = dst.a + src.a - dst.a * src.a
+        //          = src.a * 1 + dst.a * (1 - src.a)
+        Blend SrcAlpha OneMinusSrcAlpha, One OneMinusSrcAlpha
+
 
         // Users pass depth between [Near,Far] = [-1,1]. This gets stored on the depth buffer in [Near,Far] [0,1] regardless of the underlying graphics API.
         Cull Off    // Two sided rendering is crucial for immediate clipping
-        ZTest GEqual
         ZWrite Off
         Stencil
         {
@@ -39,15 +38,15 @@ Shader "Hidden/Internal-UIRDefault"
             ReadMask    255
             WriteMask   255
 
-            CompFront[_StencilCompFront]
-            PassFront[_StencilPassFront]
-            ZFailFront[_StencilZFailFront]
-            FailFront[_StencilFailFront]
+            CompFront Always
+            PassFront Keep
+            ZFailFront Replace
+            FailFront Keep
 
-            CompBack[_StencilCompBack]
-            PassBack[_StencilPassBack]
-            ZFailBack[_StencilZFailBack]
-            FailBack[_StencilFailBack]
+            CompBack Equal
+            PassBack Keep
+            ZFailBack Zero
+            FailBack Keep
         }
 
         Tags
