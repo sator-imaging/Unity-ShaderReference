@@ -10,4 +10,4 @@ Search with `path` option in GitHub.
 ## What's changed between releases
 
 Changes between release by release can be found in other branch.
-- https://github.com/sator-imaging/Unity-ShaderReference/branches
+- https://github.com/sator-imaging/Unity-ShaderReference/branches/all
