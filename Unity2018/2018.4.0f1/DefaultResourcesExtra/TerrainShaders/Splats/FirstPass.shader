@@ -5,6 +5,7 @@ Shader "Nature/Terrain/Diffuse" {
         // used in fallback on old cards & base map
         [HideInInspector] _MainTex ("BaseMap (RGB)", 2D) = "white" {}
         [HideInInspector] _Color ("Main Color", Color) = (1,1,1,1)
+        [HideInInspector] _TerrainHolesTexture("Holes Map (RGB)", 2D) = "white" {}
     }
 
     CGINCLUDE
@@ -28,13 +29,15 @@ Shader "Nature/Terrain/Diffuse" {
         Tags {
             "Queue" = "Geometry-99"
             "RenderType" = "Opaque"
+            "TerrainCompatible" = "True"
         }
         // TODO: Seems like "#pragma target 3.0 _NORMALMAP" can't fallback correctly on less capable devices?
         // Use two sub-shaders to simulate different features for different targets and still fallback correctly.
         SubShader { // for sm3.0+ targets
             CGPROGRAM
                 #pragma target 3.0
-                #pragma multi_compile __ _NORMALMAP
+                #pragma multi_compile_local_fragment __ _ALPHATEST_ON
+                #pragma multi_compile_local __ _NORMALMAP
             ENDCG
 
             UsePass "Hidden/Nature/Terrain/Utilities/PICKING"

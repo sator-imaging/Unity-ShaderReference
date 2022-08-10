@@ -7,6 +7,8 @@ Shader "Hidden/TerrainEngine/Splatmap/Standard-Base" {
 
         // used in fallback on old cards
         _Color ("Main Color", Color) = (1,1,1,1)
+
+        [HideInInspector] _TerrainHolesTexture("Holes Map (RGB)", 2D) = "white" {}
     }
 
     SubShader {
@@ -20,8 +22,8 @@ Shader "Hidden/TerrainEngine/Splatmap/Standard-Base" {
         #pragma surface surf Standard vertex:SplatmapVert addshadow fullforwardshadows
         #pragma instancing_options assumeuniformscaling nomatrices nolightprobe nolightmap forwardadd
         #pragma target 3.0
-        // needs more than 8 texcoords
-        #pragma exclude_renderers gles
+
+        #pragma multi_compile_local_fragment __ _ALPHATEST_ON
 
         #define TERRAIN_BASE_PASS
         #define TERRAIN_INSTANCED_PERPIXEL_NORMAL
@@ -32,6 +34,9 @@ Shader "Hidden/TerrainEngine/Splatmap/Standard-Base" {
         sampler2D _MetallicTex;
 
         void surf (Input IN, inout SurfaceOutputStandard o) {
+            #ifdef _ALPHATEST_ON
+                ClipHoles(IN.tc.xy);
+            #endif
             half4 c = tex2D (_MainTex, IN.tc.xy);
             o.Albedo = c.rgb;
             o.Alpha = 1;
@@ -43,7 +48,11 @@ Shader "Hidden/TerrainEngine/Splatmap/Standard-Base" {
             #endif
 
             #if defined(UNITY_INSTANCING_ENABLED) && !defined(SHADER_API_D3D11_9X) && defined(TERRAIN_INSTANCED_PERPIXEL_NORMAL)
-                o.Normal = normalize(tex2D(_TerrainNormalmapTexture, IN.tc.zw).xyz * 2 - 1).xzy;
+                #if defined(TERRAIN_USE_SEPARATE_VERTEX_SAMPLER)
+                    o.Normal = normalize(_TerrainNormalmapTexture.Sample(sampler__TerrainNormalmapTexture, IN.tc.zw).xyz * 2 - 1).xzy;
+                #else
+                    o.Normal = normalize(tex2D(_TerrainNormalmapTexture, IN.tc.zw).xyz * 2 - 1).xzy;
+                #endif
             #endif
         }
 

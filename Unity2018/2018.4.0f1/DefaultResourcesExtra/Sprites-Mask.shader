@@ -34,7 +34,7 @@ Shader "Sprites/Mask"
         CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #pragma multi_compile _ PIXELSNAP_ON
+            #pragma multi_compile_local _ PIXELSNAP_ON
             #pragma multi_compile _ ETC1_EXTERNAL_ALPHA
             #include "UnitySprites.cginc"
 
@@ -45,6 +45,7 @@ Shader "Sprites/Mask"
             {
                 float4 vertex : POSITION;
                 half2 texcoord : TEXCOORD0;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct v2f_masking
@@ -58,6 +59,7 @@ Shader "Sprites/Mask"
             {
                 v2f_masking OUT;
 
+                UNITY_SETUP_INSTANCE_ID(IN);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(OUT);
 
                 OUT.pos = UnityObjectToClipPos(IN.vertex);

@@ -14,6 +14,7 @@ Shader "Hidden/Nature/Terrain/Utilities"
                 #pragma fragment frag
                 #pragma multi_compile_instancing
                 #pragma instancing_options assumeuniformscaling nomatrices nolightprobe nolightmap
+                #pragma editor_sync_compilation
                 #include "UnityCG.cginc"
 
                 #define TERRAIN_BASE_PASS
@@ -41,11 +42,19 @@ Shader "Hidden/Nature/Terrain/Utilities"
             Name "Selection"
             Tags { "LightMode" = "SceneSelectionPass" }
 
+            Blend One Zero
+            ZTest LEqual
+            Cull Off
+            ZWrite Off
+            // push towards camera a bit, so that coord mismatch due to dynamic batching is not affecting us
+            Offset -0.02, 0
+
             CGPROGRAM
                 #pragma vertex vert
                 #pragma fragment frag
                 #pragma multi_compile_instancing
                 #pragma instancing_options assumeuniformscaling nomatrices nolightprobe nolightmap
+                #pragma editor_sync_compilation
                 #include "UnityCG.cginc"
 
                 #define TERRAIN_BASE_PASS

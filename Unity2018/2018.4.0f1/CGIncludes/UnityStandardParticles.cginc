@@ -126,6 +126,7 @@ UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
 float4 _SoftParticleFadeParams;
 float4 _CameraFadeParams;
 half _Cutoff;
+int _DstBlend;
 
 #define SOFT_PARTICLE_NEAR_FADE _SoftParticleFadeParams.x
 #define SOFT_PARTICLE_INV_FADE_DISTANCE _SoftParticleFadeParams.y
@@ -150,7 +151,7 @@ half3 RGBtoHSV(half3 arg1)
     half4 P = lerp(half4(arg1.bg, K.wz), half4(arg1.gb, K.xy), step(arg1.b, arg1.g));
     half4 Q = lerp(half4(P.xyw, arg1.r), half4(arg1.r, P.yzx), step(P.x, arg1.r));
     half D = Q.x - min(Q.w, Q.y);
-    half E = 1e-10;
+    half E = 1e-4;
     return half3(abs(Q.z + (Q.w - Q.y) / (6.0 * D + E)), D / (Q.x + E), Q.x);
 }
 
@@ -240,14 +241,16 @@ half3 HSVtoRGB(half3 arg1)
 // Soft particles fragment function
 #if defined(SOFTPARTICLES_ON) && defined(_FADING_ON)
 #define fragSoftParticles(i) \
+    float softParticlesFade = 1.0f; \
     if (SOFT_PARTICLE_NEAR_FADE > 0.0 || SOFT_PARTICLE_INV_FADE_DISTANCE > 0.0) \
     { \
         float sceneZ = LinearEyeDepth (SAMPLE_DEPTH_TEXTURE_PROJ(_CameraDepthTexture, UNITY_PROJ_COORD(i.projectedPosition))); \
-        float fade = saturate (SOFT_PARTICLE_INV_FADE_DISTANCE * ((sceneZ - SOFT_PARTICLE_NEAR_FADE) - i.projectedPosition.z)); \
-        ALBEDO_MUL *= fade; \
+        softParticlesFade = saturate (SOFT_PARTICLE_INV_FADE_DISTANCE * ((sceneZ - SOFT_PARTICLE_NEAR_FADE) - i.projectedPosition.z)); \
+        ALBEDO_MUL *= softParticlesFade; \
     }
 #else
-#define fragSoftParticles(i)
+#define fragSoftParticles(i) \
+    float softParticlesFade = 1.0f;
 #endif
 
 // Camera fading fragment function
@@ -256,7 +259,8 @@ half3 HSVtoRGB(half3 arg1)
     float cameraFade = saturate((i.projectedPosition.z - CAMERA_NEAR_FADE) * CAMERA_INV_FADE_DISTANCE); \
     ALBEDO_MUL *= cameraFade;
 #else
-#define fragCameraFading(i)
+#define fragCameraFading(i) \
+    float cameraFade = 1.0f;
 #endif
 
 #if _DISTORTION_ON
@@ -302,7 +306,7 @@ void surf (Input IN, inout SurfaceOutputStandard o)
     #endif
 
     #if defined(_EMISSION)
-    half3 emission = readTexture (_EmissionMap, IN).rgb;
+    half3 emission = readTexture (_EmissionMap, IN).rgb * cameraFade * softParticlesFade;
     #else
     half3 emission = 0;
     #endif
@@ -379,7 +383,7 @@ half4 fragParticleUnlit (VertexOutput IN) : SV_Target
     result.rgb = lerp(half3(1.0, 1.0, 1.0), albedo.rgb, albedo.a);
     #endif
 
-    result.rgb += emission * _EmissionColor;
+    result.rgb += emission * _EmissionColor * cameraFade * softParticlesFade;
 
     #if !defined(_ALPHABLEND_ON) && !defined(_ALPHAPREMULTIPLY_ON) && !defined(_ALPHAOVERLAY_ON)
     result.a = 1;
@@ -389,7 +393,21 @@ half4 fragParticleUnlit (VertexOutput IN) : SV_Target
     clip (albedo.a - _Cutoff + 0.0001);
     #endif
 
-    UNITY_APPLY_FOG_COLOR(IN.fogCoord, result, fixed4(0,0,0,0));
+    #if defined(_ALPHAMODULATE_ON)
+    UNITY_APPLY_FOG_COLOR(IN.fogCoord, result, fixed4(1, 1, 1, 0));         // modulate - fog to white color
+    #elif !defined(_ALPHATEST_ON) && defined(_ALPHABLEND_ON) && !defined(_ALPHAPREMULTIPLY_ON)
+    if (_DstBlend == 1)
+    {
+        UNITY_APPLY_FOG_COLOR(IN.fogCoord, result, fixed4(0, 0, 0, 0));     // additive - fog to black color
+    }
+    else
+    {
+        UNITY_APPLY_FOG(IN.fogCoord, result);                               // fade - normal fog
+    }
+    #else
+    UNITY_APPLY_FOG(IN.fogCoord, result);                                   // opaque - normal fog
+    #endif
+
     return result;
 }
 

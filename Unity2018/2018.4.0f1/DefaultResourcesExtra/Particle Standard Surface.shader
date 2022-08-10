@@ -71,11 +71,13 @@ Shader "Particles/Standard Surface"
             Cull Off
 
             CGPROGRAM
+            //vertInstancingSetup writes to global, not allowed with DXC
+            #pragma never_use_dxc
             #pragma target 3.0
 
-            #pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON _ALPHAMODULATE_ON
-            #pragma shader_feature _METALLICGLOSSMAP
-            #pragma shader_feature _REQUIRE_UV2
+            #pragma shader_feature_local _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON _ALPHAMODULATE_ON
+            #pragma shader_feature_local_fragment _METALLICGLOSSMAP
+            #pragma shader_feature_local _REQUIRE_UV2
             #pragma multi_compile_shadowcaster
             #pragma multi_compile_instancing
             #pragma instancing_options procedural:vertInstancingSetup
@@ -98,10 +100,12 @@ Shader "Particles/Standard Surface"
             Cull Off
 
             CGPROGRAM
+            //vertInstancingSetup writes to global, not allowed with DXC
+            #pragma never_use_dxc
             #pragma target 3.0
 
-            #pragma shader_feature _ _ALPHATEST_ON
-            #pragma shader_feature _REQUIRE_UV2
+            #pragma shader_feature_local_fragment _ALPHATEST_ON
+            #pragma shader_feature_local _REQUIRE_UV2
             #pragma multi_compile_instancing
             #pragma instancing_options procedural:vertInstancingSetup
 
@@ -123,10 +127,12 @@ Shader "Particles/Standard Surface"
             Cull Off
 
             CGPROGRAM
+            //vertInstancingSetup writes to global, not allowed with DXC
+            #pragma never_use_dxc
             #pragma target 3.0
 
-            #pragma shader_feature _ _ALPHATEST_ON
-            #pragma shader_feature _REQUIRE_UV2
+            #pragma shader_feature_local_fragment _ALPHATEST_ON
+            #pragma shader_feature_local _REQUIRE_UV2
             #pragma multi_compile_instancing
             #pragma instancing_options procedural:vertInstancingSetup
 
@@ -138,19 +144,22 @@ Shader "Particles/Standard Surface"
         }
 
         CGPROGRAM
+        //vertInstancingSetup writes to global, not allowed with DXC
+        #pragma never_use_dxc
         #pragma surface surf Standard nolightmap nometa noforwardadd keepalpha vertex:vert
         #pragma multi_compile __ SOFTPARTICLES_ON
+        #pragma multi_compile __ SHADOWS_SHADOWMASK
         #pragma multi_compile_instancing
         #pragma instancing_options procedural:vertInstancingSetup
         #pragma target 3.0
 
-        #pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON _ALPHAMODULATE_ON
-        #pragma shader_feature _METALLICGLOSSMAP
-        #pragma shader_feature _NORMALMAP
-        #pragma shader_feature _EMISSION
-        #pragma shader_feature _FADING_ON
-        #pragma shader_feature _REQUIRE_UV2
-        #pragma shader_feature EFFECT_BUMP
+        #pragma shader_feature_local_fragment _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON _ALPHAMODULATE_ON
+        #pragma shader_feature_local_fragment _METALLICGLOSSMAP
+        #pragma shader_feature_local _NORMALMAP
+        #pragma shader_feature_fragment _EMISSION
+        #pragma shader_feature_local _FADING_ON
+        #pragma shader_feature_local _REQUIRE_UV2
+        #pragma shader_feature_local EFFECT_BUMP
 
         #include "UnityStandardParticles.cginc"
         ENDCG
